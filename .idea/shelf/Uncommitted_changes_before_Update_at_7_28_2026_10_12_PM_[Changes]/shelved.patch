@@ -1,0 +1,2230 @@
+Index: docs/Architecture/HLD.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+># High-Level Design (HLD)\r\n\r\n## Merchant Funding & ACH Settlement Platform\r\n\r\n**Version:** 1.0\r\n**Author:** Bhavyasri\r\n**Date:** July 2026\r\n\r\n---\r\n\r\n# 1. Introduction\r\n\r\nThis document describes the High-Level Design (HLD) of the Merchant Funding & ACH Settlement Platform.\r\n\r\nThe system follows a **Microservices Architecture** to ensure scalability, maintainability, and fault isolation. It simulates a real-world merchant funding workflow where a merchant requests funding, a payment is initiated through an ACH process, and a bank asynchronously acknowledges the transaction using Kafka.\r\n\r\n---\r\n\r\n# 2. System Architecture\r\n\r\nThe platform consists of the following components:\r\n\r\n* API Gateway\r\n* Eureka Service Registry\r\n* Auth Service\r\n* Funding Service\r\n* Payment Service\r\n* Notification Service\r\n* Bank Simulator\r\n* Kafka Message Broker\r\n* PostgreSQL Databases\r\n\r\n---\r\n\r\n# 3. Architecture Diagram\r\n\r\n```text\r\n                   Client (React / Postman)\r\n                           |\r\n                           |\r\n                    API Gateway\r\n                (Spring Cloud Gateway)\r\n                           |\r\n        -----------------------------------------\r\n        |           |            |              |\r\n        |           |            |              |\r\n Auth Service  Funding Service Payment Service Notification Service\r\n        |           |            |              |\r\n        -----------------------------------------\r\n                     |\r\n                Kafka Message Broker\r\n                     |\r\n               Bank Simulator\r\n                     |\r\n             Kafka Response Topic\r\n                     |\r\n              Payment Service\r\n                     |\r\n               PostgreSQL Databases\r\n\r\n           Eureka Server (Service Registry)\r\n```\r\n\r\n---\r\n\r\n# 4. Microservices Overview\r\n\r\n## 4.1 Eureka Server\r\n\r\n### Purpose\r\n\r\nActs as the Service Registry where all microservices register themselves.\r\n\r\n### Responsibilities\r\n\r\n* Service Discovery\r\n* Health Monitoring\r\n* Dynamic Service Registration\r\n\r\n---\r\n\r\n## 4.2 API Gateway\r\n\r\n### Purpose\r\n\r\nActs as the single entry point for all client requests.\r\n\r\n### Responsibilities\r\n\r\n* Request Routing\r\n* JWT Validation\r\n* Authentication Filter\r\n* Centralized Logging\r\n* Rate Limiting (Future Enhancement)\r\n\r\n---\r\n\r\n## 4.3 Auth Service\r\n\r\n### Purpose\r\n\r\nHandles user authentication and authorization.\r\n\r\n### Responsibilities\r\n\r\n* User Registration\r\n* User Login\r\n* JWT Token Generation\r\n* JWT Validation\r\n\r\n### Database\r\n\r\n**users**\r\n\r\n---\r\n\r\n## 4.4 Funding Service\r\n\r\n### Purpose\r\n\r\nHandles merchant funding requests.\r\n\r\n### Responsibilities\r\n\r\n* Create Funding Request\r\n* Validate Merchant\r\n* Calculate Funding Details\r\n* Invoke Payment Service\r\n* Track Funding Status\r\n\r\n### Database\r\n\r\n**funding_requests**\r\n\r\n---\r\n\r\n## 4.5 Payment Service\r\n\r\n### Purpose\r\n\r\nProcesses ACH payment requests.\r\n\r\n### Responsibilities\r\n\r\n* Create Payment\r\n* Publish Payment Event to Kafka\r\n* Receive Bank Acknowledgement\r\n* Update Payment Status\r\n\r\n### Database\r\n\r\n**payments**\r\n\r\n---\r\n\r\n## 4.6 Notification Service\r\n\r\n### Purpose\r\n\r\nSends notifications after payment completion.\r\n\r\n### Responsibilities\r\n\r\n- Notify merchants when a payment is completed successfully.\r\n- Notify merchants when a payment fails.\r\n- Email Notification (simulated using logs)\r\n- SMS Notification (Future)\r\n- Push Notification (Future)\r\n\r\nFor this project, notifications will be simulated using application logs.\r\n\r\nExample log messages:\r\n\r\n```text\r\nPayment Successful: Funding of ₹100000 has been processed successfully.\r\n\r\nPayment Failed: Funding request could not be processed. Please retry or contact support.\r\n```\r\n\r\n## 4.7 Bank Simulator\r\n\r\n### Purpose\r\n\r\nSimulates an external banking system.\r\n\r\n### Responsibilities\r\n\r\n* Consume Payment Requests\r\n* Process ACH Settlement\r\n* Publish Payment Result\r\n\r\n---\r\n\r\n# 5. Database Design\r\n\r\nEach microservice owns its own database.\r\n\r\n| Service         | Database   |\r\n| --------------- | ---------- |\r\n| Auth Service    | Auth DB    |\r\n| Funding Service | Funding DB |\r\n| Payment Service | Payment DB |\r\n\r\nNo database is shared between services.\r\n\r\nThis ensures:\r\n\r\n* Loose Coupling\r\n* Independent Deployment\r\n* Better Scalability\r\n* Fault Isolation\r\n\r\n---\r\n\r\n# 6. Communication Pattern\r\n\r\n## Synchronous Communication\r\n\r\nREST APIs are used for communication between services.\r\n\r\nExample:\r\n\r\nFunding Service → Payment Service\r\n\r\nTechnology:\r\n\r\n* Spring Cloud OpenFeign\r\n\r\n---\r\n\r\n## Asynchronous Communication\r\n\r\nKafka is used for external bank communication.\r\n\r\nFlow:\r\n\r\nPayment Service\r\n\r\n↓\r\n\r\nKafka Topic\r\n\r\n↓\r\n\r\nBank Simulator\r\n\r\n↓\r\n\r\nKafka Response Topic\r\n\r\n↓\r\n\r\nPayment Service\r\n\r\n---\r\n\r\n# 7. Kafka Topics\r\n\r\n## payment-request-topic\r\n\r\nPublishes:\r\n\r\n* Payment ID\r\n* Funding ID\r\n* Merchant ID\r\n* Amount\r\n\r\n---\r\n\r\n## payment-response-topic\r\n\r\nPublishes:\r\n\r\n* Payment ID\r\n* Transaction Status\r\n* SUCCESS / FAILED\r\n\r\n---\r\n\r\n# 8. Payment Lifecycle\r\n\r\n```text\r\nCREATED\r\n    │\r\n    ▼\r\nPROCESSING\r\n    │\r\n    ├──────────────┐\r\n    ▼              ▼\r\nSUCCESS        FAILED\r\n    │              │\r\n    ▼              ▼\r\nNotification   Notification\r\n```\r\n\r\n# 9. End-to-End Request Flow\r\n\r\n```text\r\nMerchant Login\r\n\r\n↓\r\n\r\nAuth Service\r\n\r\n↓\r\n\r\nJWT Generated\r\n\r\n↓\r\n\r\nMerchant Requests Funding\r\n\r\n↓\r\n\r\nAPI Gateway\r\n\r\n↓\r\n\r\nFunding Service\r\n\r\n↓\r\n\r\nFunding Request Saved\r\n\r\n↓\r\n\r\nFunding Service invokes Payment Service\r\n\r\n↓\r\n\r\nPayment Created\r\n\r\n↓\r\n\r\nPayment Status = CREATED\r\n\r\n↓\r\n\r\nKafka Payment Request Published\r\n\r\n↓\r\n\r\nBank Simulator Consumes Request\r\n\r\n↓\r\n\r\nProcesses ACH Settlement\r\n\r\n↓\r\n\r\nKafka Payment Response Published\r\n\r\n↓\r\n\r\nPayment Service Receives Response\r\n\r\n↓\r\n\r\nPayment Status Updated\r\n(SUCCESS or FAILED)\r\n\r\n↓\r\n\r\nNotification Service\r\n\r\n↓\r\n\r\nMerchant Notified\r\n```\r\n\r\n---\r\n\r\n# 10. Technology Stack\r\n\r\n| Component         | Technology            |\r\n| ----------------- | --------------------- |\r\n| Language          | Java 17               |\r\n| Framework         | Spring Boot           |\r\n| Build Tool        | Maven                 |\r\n| Service Discovery | Eureka Server         |\r\n| API Gateway       | Spring Cloud Gateway  |\r\n| Security          | Spring Security + JWT |\r\n| Messaging         | Apache Kafka          |\r\n| Database          | PostgreSQL            |\r\n| ORM               | Spring Data JPA       |\r\n| API Communication | OpenFeign             |\r\n| Containerization  | Docker                |\r\n| Version Control   | Git & GitHub          |\r\n\r\n---\r\n\r\n# 11. Design Decisions\r\n\r\nThe following architectural decisions were finalized for this project:\r\n\r\n* Microservices architecture\r\n* One Funding Request corresponds to one Payment\r\n* Kafka used for asynchronous bank acknowledgements\r\n* Separate database for each microservice\r\n* OpenFeign used for inter-service communication\r\n* Eureka for service discovery\r\n* API Gateway as the single entry point\r\n* JWT-based authentication\r\n* Payment lifecycle:\r\n\r\n    * CREATED\r\n    * PROCESSING\r\n    * SUCCESS\r\n    * FAILED\r\n\r\n---\r\n\r\n# 12. Future Enhancements\r\n\r\n* Merchant Dashboard (React)\r\n* Admin Portal\r\n* Retry Mechanism for Failed Payments\r\n* Distributed Tracing\r\n* Centralized Logging (ELK Stack)\r\n* Redis Caching\r\n* Kubernetes Deployment\r\n* CI/CD Pipeline\r\n* Email Service Integration\r\n* SMS Integration\r\n* Payment Retry Scheduler\r\n\r\n---\r\n\r\n# 13. Conclusion\r\n\r\nThe Merchant Funding & ACH Settlement Platform is designed using industry-standard microservices principles. The architecture emphasizes scalability, independent deployment, asynchronous messaging, and clear separation of responsibilities. This design closely resembles enterprise financial systems and provides a strong foundation for implementing the platform in Spring Boot.\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/docs/Architecture/HLD.md b/docs/Architecture/HLD.md
+--- a/docs/Architecture/HLD.md	(revision 01806dcdde7b8099aa6d092aa107e3d54caf485c)
++++ b/docs/Architecture/HLD.md	(date 1784545627400)
+@@ -1,9 +1,9 @@
+ # High-Level Design (HLD)
+ 
+-## Merchant Funding & ACH Settlement Platform
++# Merchant Funding & ACH Settlement Platform
+ 
+-**Version:** 1.0
+-**Author:** Bhavyasri
++**Version:** 2.0  
++**Author:** Bhavyasri  
+ **Date:** July 2026
+ 
+ ---
+@@ -12,7 +12,11 @@
+ 
+ This document describes the High-Level Design (HLD) of the Merchant Funding & ACH Settlement Platform.
+ 
+-The system follows a **Microservices Architecture** to ensure scalability, maintainability, and fault isolation. It simulates a real-world merchant funding workflow where a merchant requests funding, a payment is initiated through an ACH process, and a bank asynchronously acknowledges the transaction using Kafka.
++The platform follows a Microservices Architecture to provide scalability, maintainability, fault isolation, and independent deployment of business capabilities.
++
++The system simulates a real-world merchant funding workflow where a merchant requests funding, the funding request is validated and persisted, a payment is initiated through an ACH settlement process, an external banking system asynchronously processes the settlement through Kafka, and the merchant is notified once settlement is completed.
++
++Each microservice owns its own business logic and database while communicating with other services only through well-defined REST APIs or asynchronous Kafka events.
+ 
+ ---
+ 
+@@ -20,45 +24,51 @@
+ 
+ The platform consists of the following components:
+ 
+-* API Gateway
+-* Eureka Service Registry
+-* Auth Service
+-* Funding Service
+-* Payment Service
+-* Notification Service
+-* Bank Simulator
+-* Kafka Message Broker
+-* PostgreSQL Databases
++- API Gateway
++- Eureka Service Registry
++- Auth Service
++- Funding Service
++- Payment Service
++- Notification Service
++- Bank Simulator Service
++- Apache Kafka
++- MySQL Databases
+ 
+ ---
+ 
+ # 3. Architecture Diagram
+ 
+ ```text
+-                   Client (React / Postman)
+-                           |
+-                           |
++                           Client
++                    (React / Postman)
++                           │
++                           │
+                     API Gateway
+-                (Spring Cloud Gateway)
+-                           |
+-        -----------------------------------------
+-        |           |            |              |
+-        |           |            |              |
+- Auth Service  Funding Service Payment Service Notification Service
+-        |           |            |              |
+-        -----------------------------------------
+-                     |
+-                Kafka Message Broker
+-                     |
+-               Bank Simulator
+-                     |
+-             Kafka Response Topic
+-                     |
+-              Payment Service
+-                     |
+-               PostgreSQL Databases
++             (Spring Cloud Gateway)
++                           │
++      -------------------------------------------------
++      │               │               │              │
++      │               │               │              │
++ Auth Service   Funding Service   Payment Service   Notification Service
++      │               │               │                  ▲
++      │               │               │                  │
++      │               │<──────────────┘                  │
++      │         Funding Status Update                    │
++      │                                                  │
++      └──────────────────────┬───────────────────────────┘
++                             │
++                        Apache Kafka
++                  ┌──────────┴──────────┐
++                  │                     │
++ payment-settlement-request   payment-notification
++                  │
++                  ▼
++        Bank Simulator Service
++                  │
++                  ▼
++ payment-settlement-response
+ 
+-           Eureka Server (Service Registry)
++      Eureka Server (Service Registry)
+ ```
+ 
+ ---
+@@ -73,9 +83,10 @@
+ 
+ ### Responsibilities
+ 
+-* Service Discovery
+-* Health Monitoring
+-* Dynamic Service Registration
++- Service Discovery
++- Dynamic Service Registration
++- Health Monitoring
++- Service Lookup
+ 
+ ---
+ 
+@@ -87,11 +98,12 @@
+ 
+ ### Responsibilities
+ 
+-* Request Routing
+-* JWT Validation
+-* Authentication Filter
+-* Centralized Logging
+-* Rate Limiting (Future Enhancement)
++- Request Routing
++- JWT Validation
++- Authentication Filter
++- Route Protection
++- Centralized Logging
++- Rate Limiting (Future Enhancement)
+ 
+ ---
+ 
+@@ -99,18 +111,23 @@
+ 
+ ### Purpose
+ 
+-Handles user authentication and authorization.
++Handles merchant authentication and authorization.
+ 
+ ### Responsibilities
+ 
+-* User Registration
+-* User Login
+-* JWT Token Generation
+-* JWT Validation
++- Merchant Registration
++- Merchant Login
++- JWT Token Generation
++- JWT Validation
++- Merchant Profile Management
+ 
+ ### Database
+ 
+-**users**
++**Auth Database**
++
++Table:
++
++- merchants
+ 
+ ---
+ 
+@@ -118,19 +135,26 @@
+ 
+ ### Purpose
+ 
+-Handles merchant funding requests.
++Manages merchant funding requests throughout their lifecycle.
+ 
+ ### Responsibilities
+ 
+-* Create Funding Request
+-* Validate Merchant
+-* Calculate Funding Details
+-* Invoke Payment Service
+-* Track Funding Status
++- Create Funding Request
++- Validate Merchant
++- Calculate Funding Eligibility
++- Generate Funding Reference Number
++- Invoke Payment Service
++- Receive Payment Status Updates
++- Update Funding Status
++- Retrieve Funding Details
+ 
+ ### Database
+ 
+-**funding_requests**
++**Funding Database**
++
++Table:
++
++- funding_requests
+ 
+ ---
+ 
+@@ -138,18 +162,26 @@
+ 
+ ### Purpose
+ 
+-Processes ACH payment requests.
++Manages the complete payment lifecycle for merchant funding requests.
+ 
+ ### Responsibilities
+ 
+-* Create Payment
+-* Publish Payment Event to Kafka
+-* Receive Bank Acknowledgement
+-* Update Payment Status
++- Create Payment
++- Persist Payment Information
++- Generate Payment Reference Number
++- Publish Settlement Requests to Kafka
++- Consume Settlement Results
++- Update Payment Status
++- Notify Funding Service
++- Publish Notification Events
+ 
+ ### Database
+ 
+-**payments**
++**Payment Database**
++
++Table:
++
++- payments
+ 
+ ---
+ 
+@@ -157,37 +189,54 @@
+ 
+ ### Purpose
+ 
+-Sends notifications after payment completion.
++Sends merchant notifications after payment settlement is completed.
++
++The service consumes notification events from Kafka and simulates notification delivery using application logs.
+ 
+ ### Responsibilities
+ 
+-- Notify merchants when a payment is completed successfully.
+-- Notify merchants when a payment fails.
+-- Email Notification (simulated using logs)
++- Consume Notification Events
++- Notify Merchant on Successful Payment
++- Notify Merchant on Failed Payment
++- Simulate Email Notifications
+ - SMS Notification (Future)
+ - Push Notification (Future)
+ 
+-For this project, notifications will be simulated using application logs.
+-
+ Example log messages:
+ 
+ ```text
+-Payment Successful: Funding of ₹100000 has been processed successfully.
++Payment Successful
++
++Funding Reference : FUND-202607-000001
++Amount            : ₹100000
++Status            : COMPLETED
++```
++
++```text
++Payment Failed
+ 
+-Payment Failed: Funding request could not be processed. Please retry or contact support.
++Funding Reference : FUND-202607-000001
++Reason            : Bank rejected settlement.
++Status            : FAILED
+ ```
+ 
+-## 4.7 Bank Simulator
++---
++
++## 4.7 Bank Simulator Service
+ 
+ ### Purpose
+ 
+-Simulates an external banking system.
++Simulates an external banking system responsible for ACH settlement.
++
++The Bank Simulator consumes settlement requests from Kafka, performs simulated settlement processing, and publishes the settlement result back to Kafka.
+ 
+ ### Responsibilities
+ 
+-* Consume Payment Requests
+-* Process ACH Settlement
+-* Publish Payment Result
++- Consume Settlement Requests
++- Simulate ACH Settlement
++- Publish Settlement Results
++
++The Bank Simulator does not persist any business data.
+ 
+ ---
+ 
+@@ -195,237 +244,570 @@
+ 
+ Each microservice owns its own database.
+ 
+-| Service         | Database   |
+-| --------------- | ---------- |
+-| Auth Service    | Auth DB    |
++| Service | Database |
++|----------|----------|
++| Auth Service | Auth DB |
+ | Funding Service | Funding DB |
+ | Payment Service | Payment DB |
+ 
+-No database is shared between services.
++No database is shared between microservices.
+ 
+-This ensures:
++This architecture provides:
+ 
+-* Loose Coupling
+-* Independent Deployment
+-* Better Scalability
+-* Fault Isolation
++- Loose Coupling
++- Independent Deployment
++- Fault Isolation
++- Better Scalability
++- Independent Data Ownership
++- Clear Service Boundaries
+ 
+ ---
+ 
+ # 6. Communication Pattern
+ 
+-## Synchronous Communication
++The Merchant Funding & ACH Settlement Platform uses both synchronous REST communication and asynchronous event-driven messaging.
++
++## 6.1 Synchronous Communication
+ 
+-REST APIs are used for communication between services.
++REST APIs are used where an immediate response is required.
+ 
+-Example:
++### Funding Service → Payment Service
+ 
+-Funding Service → Payment Service
++The Funding Service invokes the Payment Service to create a payment after successfully validating and creating a funding request.
+ 
+-Technology:
++**Technology**
+ 
+-* Spring Cloud OpenFeign
++- Spring Cloud OpenFeign
+ 
+ ---
+ 
+-## Asynchronous Communication
++### Payment Service → Funding Service
++
++After receiving the final settlement result from the Bank Simulator, the Payment Service notifies the Funding Service to update the funding status.
++
++**Technology**
+ 
+-Kafka is used for external bank communication.
++- Spring Cloud OpenFeign
+ 
+-Flow:
++---
+ 
++## 6.2 Asynchronous Communication
++
++Apache Kafka is used for communication with external systems and for event-driven processing.
++
++### Settlement Processing
++
++```text
+ Payment Service
+-
+-↓
+-
+-Kafka Topic
+-
+-↓
+-
+-Bank Simulator
+-
+-↓
+-
+-Kafka Response Topic
+-
+-↓
+-
++        │
++        │ Publish Settlement Request
++        ▼
++payment-settlement-request
++        │
++        ▼
++Bank Simulator Service
++        │
++        │ Simulate ACH Settlement
++        ▼
++payment-settlement-response
++        │
++        ▼
+ Payment Service
++```
++
++---
++
++### Notification Processing
++
++```text
++Payment Service
++        │
++        │ Publish Notification Event
++        ▼
++payment-notification
++        │
++        ▼
++Notification Service
++        │
++        ▼
++Merchant Notification (Simulated)
++```
++
++Using Kafka decouples services, improves scalability, and enables resilient event-driven processing.
+ 
+ ---
+ 
+ # 7. Kafka Topics
+ 
+-## payment-request-topic
++The platform uses Apache Kafka for asynchronous communication.
++
++---
++
++## payment-settlement-request
++
++Published By:
++
++- Payment Service
++
++Consumed By:
++
++- Bank Simulator Service
++
++Purpose:
++
++Carries settlement requests from the Payment Service to the Bank Simulator.
++
++Typical payload:
++
++- Payment ID
++- Funding ID
++- Merchant ID
++- Settlement Account Number
++- Amount
++- Currency
++
++---
++
++## payment-settlement-response
++
++Published By:
++
++- Bank Simulator Service
+ 
+-Publishes:
++Consumed By:
+ 
+-* Payment ID
+-* Funding ID
+-* Merchant ID
+-* Amount
++- Payment Service
++
++Purpose:
++
++Carries the final settlement outcome after ACH processing.
++
++Typical payload:
++
++- Payment ID
++- Settlement Status
++- Failure Reason (Optional)
+ 
+ ---
+ 
+-## payment-response-topic
++## payment-notification
+ 
+-Publishes:
++Published By:
+ 
+-* Payment ID
+-* Transaction Status
+-* SUCCESS / FAILED
++- Payment Service
++
++Consumed By:
++
++- Notification Service
++
++Purpose:
++
++Triggers merchant notifications after settlement reaches a final state.
++
++Typical payload:
++
++- Funding Reference
++- Payment Reference
++- Merchant ID
++- Payment Status
++- Amount
++- Failure Reason (Optional)
+ 
+ ---
+ 
+ # 8. Payment Lifecycle
+ 
++The Payment Service owns the complete payment lifecycle.
++
+ ```text
+ CREATED
+     │
+     ▼
+ PROCESSING
+     │
+-    ├──────────────┐
+-    ▼              ▼
+-SUCCESS        FAILED
+-    │              │
+-    ▼              ▼
+-Notification   Notification
++    ├───────────────┐
++    ▼               ▼
++COMPLETED        FAILED
+ ```
++
++Lifecycle description:
++
++- **CREATED** – Payment record has been persisted.
++- **PROCESSING** – Settlement request has been successfully published to Kafka.
++- **COMPLETED** – Bank Simulator confirms successful settlement.
++- **FAILED** – Bank Simulator reports settlement failure.
++
++Only the Payment Service is responsible for changing payment status.
++
++---
+ 
+ # 9. End-to-End Request Flow
+ 
+ ```text
+ Merchant Login
+-
+-↓
+-
++        │
++        ▼
+ Auth Service
+-
+-↓
+-
++        │
++        ▼
+ JWT Generated
+-
+-↓
+-
++        │
++        ▼
+ Merchant Requests Funding
+-
+-↓
+-
++        │
++        ▼
+ API Gateway
+-
+-↓
+-
++        │
++        ▼
+ Funding Service
+-
+-↓
+-
++        │
++        │ Validate Merchant
++        │
++        │ Calculate Funding Details
++        │
++        ▼
+ Funding Request Saved
+-
+-↓
+-
++(Status = CREATED)
++        │
++        ▼
+ Funding Service invokes Payment Service
+-
+-↓
+-
++        │
++        ▼
+ Payment Created
+-
+-↓
+-
+-Payment Status = CREATED
+-
+-↓
+-
+-Kafka Payment Request Published
+-
+-↓
+-
+-Bank Simulator Consumes Request
+-
+-↓
+-
+-Processes ACH Settlement
+-
+-↓
+-
+-Kafka Payment Response Published
+-
+-↓
+-
+-Payment Service Receives Response
+-
+-↓
+-
+-Payment Status Updated
+-(SUCCESS or FAILED)
+-
+-↓
+-
+-Notification Service
+-
+-↓
+-
+-Merchant Notified
++(Status = CREATED)
++        │
++        ▼
++Payment Service publishes
++payment-settlement-request
++        │
++        ▼
++Payment Status = PROCESSING
++        │
++        ▼
++Bank Simulator Service
++        │
++        │ Simulates ACH Settlement
++        ▼
++Publishes
++payment-settlement-response
++        │
++        ▼
++Payment Service
++        │
++        │ Updates Payment Status
++        ▼
++COMPLETED / FAILED
++        │
++        ├───────────────┐
++        │               │
++        ▼               ▼
++Notify Funding      Publish
++Service             payment-notification
++        │               │
++        ▼               ▼
++Funding Status     Notification Service
++Updated                 │
++                        ▼
++                Merchant Notified
+ ```
+ 
+ ---
+ 
+ # 10. Technology Stack
+ 
+-| Component         | Technology            |
+-| ----------------- | --------------------- |
+-| Language          | Java 17               |
+-| Framework         | Spring Boot           |
+-| Build Tool        | Maven                 |
+-| Service Discovery | Eureka Server         |
+-| API Gateway       | Spring Cloud Gateway  |
+-| Security          | Spring Security + JWT |
+-| Messaging         | Apache Kafka          |
+-| Database          | PostgreSQL            |
+-| ORM               | Spring Data JPA       |
+-| API Communication | OpenFeign             |
+-| Containerization  | Docker                |
+-| Version Control   | Git & GitHub          |
++| Component | Technology |
++|------------|------------|
++| Programming Language | Java 17 |
++| Framework | Spring Boot 3 |
++| Build Tool | Maven |
++| Service Discovery | Netflix Eureka |
++| API Gateway | Spring Cloud Gateway |
++| Security | Spring Security + JWT |
++| Messaging | Apache Kafka |
++| Database | MySQL |
++| ORM | Spring Data JPA (Hibernate) |
++| Inter-Service Communication | Spring Cloud OpenFeign |
++| Containerization | Docker |
++| API Testing | Postman |
++| Version Control | Git & GitHub |
++| Documentation | Markdown |
++| IDE | IntelliJ IDEA |
+ 
+ ---
+ 
+ # 11. Design Decisions
+ 
+-The following architectural decisions were finalized for this project:
++The following architectural decisions have been finalized for the Merchant Funding & ACH Settlement Platform.
++
++---
++
++## Microservices Architecture
++
++The platform is designed using a microservices architecture, where each service owns a single business capability and can be developed, deployed, and scaled independently.
++
++---
++
++## Database per Service
++
++Each microservice owns its own database.
++
++No database is shared between services.
++
++Benefits include:
++
++- Loose Coupling
++- Independent Deployment
++- Fault Isolation
++- Independent Scaling
++- Clear Data Ownership
++
++---
++
++## Service Responsibilities
++
++Each service has a clearly defined responsibility.
++
++| Service | Responsibility |
++|----------|----------------|
++| Auth Service | Merchant authentication and authorization |
++| Funding Service | Funding request lifecycle |
++| Payment Service | Payment lifecycle and settlement processing |
++| Notification Service | Merchant notifications |
++| Bank Simulator Service | ACH settlement simulation |
++
++---
++
++## One Funding Request = One Payment
++
++Each funding request results in exactly one payment.
++
++This simplifies business rules, ensures clear traceability, and maintains a one-to-one relationship between funding requests and payments.
++
++---
++
++## Payment Lifecycle
++
++The Payment Service exclusively owns the payment lifecycle.
++
++```text
++CREATED
++    │
++    ▼
++PROCESSING
++    │
++    ├──────────────┐
++    ▼              ▼
++COMPLETED      FAILED
++```
++
++No other service is allowed to update payment status.
++
++---
++
++## Funding Lifecycle
++
++The Funding Service owns the funding request lifecycle.
++
++Funding status is updated only after the Payment Service communicates the final payment outcome.
++
++Typical lifecycle:
++
++```text
++CREATED
++    │
++    ▼
++PROCESSING
++    │
++    ├──────────────┐
++    ▼              ▼
++APPROVED       REJECTED
++```
++
++---
++
++## Event-Driven Settlement
++
++Communication with the external banking system is asynchronous.
++
++Instead of waiting for the bank to complete settlement, the Payment Service publishes settlement requests to Kafka.
++
++The Bank Simulator processes the request independently and publishes the settlement result.
++
++Benefits include:
++
++- Loose Coupling
++- Better Throughput
++- Improved Scalability
++- Fault Isolation
++- Non-blocking Processing
++
++---
+ 
+-* Microservices architecture
+-* One Funding Request corresponds to one Payment
+-* Kafka used for asynchronous bank acknowledgements
+-* Separate database for each microservice
+-* OpenFeign used for inter-service communication
+-* Eureka for service discovery
+-* API Gateway as the single entry point
+-* JWT-based authentication
+-* Payment lifecycle:
++## Event-Driven Notifications
+ 
+-    * CREATED
+-    * PROCESSING
+-    * SUCCESS
+-    * FAILED
++Merchant notifications are processed asynchronously.
++
++Once settlement reaches a final state, the Payment Service publishes a notification event to Kafka.
++
++The Notification Service consumes the event and sends the notification independently.
++
++Benefits include:
++
++- Faster Payment Processing
++- Independent Notification Service
++- Retry Capability
++- Better Scalability
++
++---
++
++## REST Communication
++
++REST APIs are used only where immediate responses are required.
++
++Examples:
++
++- Funding Service → Payment Service
++- Payment Service → Funding Service
++
++OpenFeign is used for internal service-to-service communication.
++
++---
++
++## Apache Kafka
++
++Kafka is used for asynchronous messaging.
++
++Current topics include:
++
++- payment-settlement-request
++- payment-settlement-response
++- payment-notification
++
++Kafka provides:
++
++- Reliable Message Delivery
++- Loose Coupling
++- Scalability
++- Event-Driven Architecture
++
++---
++
++## Optimistic Locking
++
++The Payment Service uses optimistic locking through a version field.
++
++This prevents concurrent updates from:
++
++- Duplicate Kafka messages
++- Retry mechanisms
++- Simultaneous settlement acknowledgements
++
++---
++
++## Security
++
++The platform follows JWT-based authentication.
++
++Security responsibilities are divided as follows:
++
++- API Gateway validates incoming JWT tokens.
++- Auth Service manages authentication and token generation.
++- Internal microservices communicate through trusted internal APIs.
++- Internal APIs are not exposed directly to external clients.
++
++---
++
++## Reference Numbers
++
++Business-friendly reference numbers are generated for operational tracking.
++
++Examples:
++
++Funding Reference
++
++```text
++FUND-202607-000001
++```
++
++Payment Reference
++
++```text
++PAY-202607-000001
++```
++
++Internally, UUIDs remain the primary identifiers.
++
++---
++
++## Auditing
++
++Business entities maintain audit fields.
++
++Typical audit information includes:
++
++- createdAt
++- updatedAt
++
++These fields support:
++
++- Operational Monitoring
++- Troubleshooting
++- Reporting
++- Auditing
+ 
+ ---
+ 
+ # 12. Future Enhancements
+ 
+-* Merchant Dashboard (React)
+-* Admin Portal
+-* Retry Mechanism for Failed Payments
+-* Distributed Tracing
+-* Centralized Logging (ELK Stack)
+-* Redis Caching
+-* Kubernetes Deployment
+-* CI/CD Pipeline
+-* Email Service Integration
+-* SMS Integration
+-* Payment Retry Scheduler
++The following enhancements are planned for future releases.
++
++## Functional Enhancements
++
++- Merchant Dashboard
++- Admin Portal
++- Payment Cancellation
++- Payment Retry
++- Partial Payments
++- Bulk Payment Processing
++- Multi-Currency Support
++- Merchant Payment History
++- Funding Analytics Dashboard
++- Daily Settlement Reconciliation
++
++---
++
++## Technical Enhancements
++
++- Transactional Outbox Pattern
++- Idempotent Payment Creation
++- Dead Letter Queue (DLQ)
++- Kafka Retry Topics
++- Resilience4j Circuit Breaker
++- OpenTelemetry Distributed Tracing
++- ELK Stack Centralized Logging
++- Prometheus Monitoring
++- Grafana Dashboards
++- Redis Caching
++- Kubernetes Deployment
++- CI/CD Pipeline
++- API Versioning
++- Distributed Configuration using Spring Cloud Config
+ 
+ ---
+ 
+ # 13. Conclusion
+ 
+-The Merchant Funding & ACH Settlement Platform is designed using industry-standard microservices principles. The architecture emphasizes scalability, independent deployment, asynchronous messaging, and clear separation of responsibilities. This design closely resembles enterprise financial systems and provides a strong foundation for implementing the platform in Spring Boot.
++The Merchant Funding & ACH Settlement Platform is designed using enterprise-grade microservice principles with clear service ownership, independent databases, synchronous REST communication for internal business operations, and asynchronous event-driven messaging for settlement and notification processing.
++
++The architecture separates responsibilities across dedicated microservices:
++
++- Auth Service manages authentication and merchant identity.
++- Funding Service manages funding requests.
++- Payment Service owns the complete payment lifecycle.
++- Bank Simulator Service simulates external ACH settlement.
++- Notification Service handles merchant notifications.
++
++Apache Kafka enables resilient and scalable asynchronous communication, while Spring Cloud components such as Eureka, Gateway, and OpenFeign provide service discovery, centralized routing, and efficient inter-service communication.
++
++The platform establishes a strong foundation for implementing enterprise patterns such as idempotency, retry mechanisms, transactional messaging, distributed tracing, centralized monitoring, and cloud-native deployment while remaining simple, modular, and maintainable for the initial implementation.
++
+Index: docs/Architecture/LLD/BankSimulator-service-lld.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/docs/Architecture/LLD/BankSimulator-service-lld.md b/docs/Architecture/LLD/BankSimulator-service-lld.md
+new file mode 100644
+--- /dev/null	(date 1784974575354)
++++ b/docs/Architecture/LLD/BankSimulator-service-lld.md	(date 1784974575354)
+@@ -0,0 +1,482 @@
++# Low-Level Design (LLD)
++
++# Bank Simulator Service
++
++**Project:** Merchant Funding & ACH Settlement Platform
++**Version:** 1.0
++**Author:** Bhavyasri
++**Date:** July 2026
++
++---
++
++# 1. Purpose
++
++The Bank Simulator Service simulates an external banking system responsible for ACH settlement processing.
++
++It consumes settlement requests published by the Payment Service through Apache Kafka, applies settlement decision logic, and publishes the final settlement result back to Kafka.
++
++The Bank Simulator is intentionally designed as a stateless service to mimic an external bank integration while keeping the implementation simple and maintainable.
++
++The service does not persist business data and does not own payment information.
++
++---
++
++# 2. Responsibilities
++
++* Consume settlement requests from Kafka
++* Validate incoming settlement events
++* Simulate ACH settlement processing
++* Apply settlement approval rules
++* Determine settlement result
++* Publish settlement outcomes to Kafka
++* Generate settlement logs
++* Simulate external banking behavior
++
++---
++
++# 3. Package Structure
++
++```text
++bank-simulator-service
++│
++├── config
++├── dto
++├── enums
++├── exception
++├── kafka
++│     ├── consumer
++│     └── producer
++├── service
++│     ├── interfaces
++│     └── impl
++├── util
++└── BankSimulatorApplication.java
++```
++
++---
++
++# 4. Persistence Model
++
++### Database
++
++The Bank Simulator Service does not maintain a database.
++
++The service is intentionally stateless because:
++
++* It simulates an external banking system
++* It does not own payment data
++* It processes requests independently
++* It does not require long-term storage
++* Settlement decisions are generated dynamically
++
++Payment records remain the responsibility of the Payment Service.
++
++---
++
++# 5. Domain Model
++
++The Bank Simulator does not maintain entities.
++
++It uses DTOs and enums for processing.
++
++---
++
++## SettlementStatus
++
++```text
++COMPLETED
++FAILED
++```
++
++---
++
++# 6. DTO Design
++
++## BankSettlementEvent
++
++Consumed from Kafka.
++
++| Field                   | Type       |
++| ----------------------- | ---------- |
++| paymentId               | UUID       |
++| fundingId               | UUID       |
++| merchantId              | UUID       |
++| settlementAccountNumber | String     |
++| amount                  | BigDecimal |
++| currency                | Currency   |
++
++Example:
++
++```json
++{
++  "paymentId": "uuid",
++  "fundingId": "uuid",
++  "merchantId": "uuid",
++  "settlementAccountNumber": "ACC1001",
++  "amount": 100000,
++  "currency": "INR"
++}
++```
++
++---
++
++## BankSettlementResult
++
++Published to Kafka.
++
++| Field            | Type             |
++| ---------------- | ---------------- |
++| paymentId        | UUID             |
++| settlementStatus | SettlementStatus |
++| failureReason    | String           |
++
++Example:
++
++```json
++{
++  "paymentId": "uuid",
++  "settlementStatus": "COMPLETED",
++  "failureReason": null
++}
++```
++
++Failure example:
++
++```json
++{
++  "paymentId": "uuid",
++  "settlementStatus": "FAILED",
++  "failureReason": "Settlement amount exceeds bank approval limit."
++}
++```
++
++---
++
++## Currency
++
++```text
++INR
++```
++
++Version 1 supports only INR.
++
++The enum is included for future extensibility.
++
++---
++
++# 7. Kafka Design
++
++---
++
++## Consumer
++
++### Topic
++
++```text
++payment-settlement-request
++```
++
++Published By:
++
++* Payment Service
++
++Consumed By:
++
++* Bank Simulator Service
++
++Purpose:
++
++Receives settlement requests for ACH processing.
++
++---
++
++## Producer
++
++### Topic
++
++```text
++payment-settlement-response
++```
++
++Published By:
++
++* Bank Simulator Service
++
++Consumed By:
++
++* Payment Service
++
++Purpose:
++
++Returns settlement outcomes.
++
++---
++
++# 8. Component Design
++
++## SettlementConsumer
++
++### Responsibilities
++
++* Consume settlement requests
++* Validate incoming events
++* Delegate processing to SettlementService
++
++### Kafka Topic
++
++```text
++payment-settlement-request
++```
++
++---
++
++## SettlementService
++
++### Responsibilities
++
++* Process settlement requests
++* Simulate ACH processing
++* Apply approval rules
++* Determine settlement outcome
++* Build response events
++* Publish settlement result
++
++### Primary Methods
++
++* processSettlement()
++* determineSettlementStatus()
++* buildSettlementResult()
++* publishSettlementResult()
++
++---
++
++## SettlementProducer
++
++### Responsibilities
++
++* Publish settlement results
++* Send messages to Kafka
++
++### Kafka Topic
++
++```text
++payment-settlement-response
++```
++
++---
++
++# 9. Exception Handling
++
++The Bank Simulator uses centralized exception handling.
++
++| Exception                       | Description                  |
++| ------------------------------- | ---------------------------- |
++| InvalidSettlementEventException | Invalid settlement request   |
++| SettlementProcessingException   | Settlement processing failed |
++| KafkaPublishException           | Kafka publishing failure     |
++| ValidationException             | Invalid event payload        |
++
++---
++
++# 10. Sequence Flow
++
++## Settlement Processing
++
++```text
++Payment Service
++        │
++        │ Publish Settlement Request
++        ▼
++Kafka Topic
++(payment-settlement-request)
++        │
++        ▼
++SettlementConsumer
++        │
++        ▼
++SettlementService
++        │
++        │ Validate Event
++        │
++        │ Simulate ACH Processing
++        │
++        │ Apply Settlement Rules
++        ▼
++Determine Result
++(COMPLETED / FAILED)
++        │
++        ▼
++SettlementProducer
++        │
++        ▼
++Kafka Topic
++(payment-settlement-response)
++        │
++        ▼
++Payment Service
++```
++
++---
++
++# 11. Settlement Decision Logic
++
++The Bank Simulator applies deterministic settlement rules.
++
++---
++
++## Approval Rule
++
++```text
++If amount <= 500000
++
++        COMPLETED
++
++Else
++
++        FAILED
++```
++
++---
++
++## Failure Reason
++
++```text
++Settlement amount exceeds bank approval limit.
++```
++
++---
++
++## Examples
++
++### Successful Settlement
++
++```text
++Amount = 100000
++
++Result = COMPLETED
++```
++
++---
++
++### Failed Settlement
++
++```text
++Amount = 700000
++
++Result = FAILED
++Reason = Settlement amount exceeds bank approval limit.
++```
++
++---
++
++This rule is intentionally deterministic to make testing, demonstrations, and implementation easier.
++
++In real banking systems, settlement decisions would depend on:
++
++* Account balance
++* Fraud checks
++* AML validation
++* KYC verification
++* Regulatory compliance
++* Risk scoring
++* Transaction limits
++
++---
++
++# 12. Design Considerations
++
++---
++
++## Stateless Service
++
++The Bank Simulator is stateless.
++
++It does not own business data and does not maintain a database.
++
++---
++
++## Event-Driven Processing
++
++Settlement processing is asynchronous using Kafka.
++
++This provides:
++
++* Loose coupling
++* Better scalability
++* Independent deployment
++* Fault isolation
++
++---
++
++## Deterministic Settlement Logic
++
++Simple business rules are used to ensure predictable results.
++
++This improves:
++
++* Testing
++* Debugging
++* Demonstrations
++
++---
++
++## Service Independence
++
++The Bank Simulator communicates only through Kafka.
++
++It does not call other services directly.
++
++---
++
++## External System Simulation
++
++The service is designed to imitate an external banking system.
++
++A real bank integration can replace this service in the future without affecting internal business services.
++
++---
++
++# 13. Future Enhancements
++
++## Functional Enhancements
++
++* Randomized settlement
++* Multiple bank simulations
++* Configurable approval rules
++* Different bank profiles
++* Settlement delays
++
++---
++
++## Technical Enhancements
++
++* Rule Engine Integration
++* Retry Processing
++* Dead Letter Queue (DLQ)
++* Kafka Retry Topics
++* Audit Logging
++* Distributed Tracing
++* External Bank API Integration
++* Fraud Detection
++* AML Validation
++* KYC Verification
++
++---
++
++# 14. Conclusion
++
++The Bank Simulator Service simulates an external ACH banking system within the Merchant Funding & ACH Settlement Platform.
++
++The service consumes settlement requests, applies deterministic approval rules, and publishes settlement outcomes asynchronously through Kafka.
++
++Its stateless and event-driven design keeps the implementation simple while providing a realistic representation of external banking integration.
++
++The design enables:
++
++* Asynchronous settlement processing
++* Loose coupling
++* Independent deployment
++* Easy testing
++* Future replacement with real banking integrations
++
++The Bank Simulator provides a practical and maintainable approach for demonstrating enterprise payment workflows while keeping implementation complexity low.
+Index: docs/Architecture/LLD/Payment-service-LLD.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/docs/Architecture/LLD/Payment-service-LLD.md b/docs/Architecture/LLD/Payment-service-LLD.md
+new file mode 100644
+--- /dev/null	(date 1784545140220)
++++ b/docs/Architecture/LLD/Payment-service-LLD.md	(date 1784545140220)
+@@ -0,0 +1,689 @@
++# Low-Level Design (LLD)
++
++# Payment Service
++
++**Project:** Merchant Funding & ACH Settlement Platform  
++**Version:** 1.0  
++**Author:** Bhavyasri  
++**Date:** July 2026
++
++---
++
++# 1. Purpose
++
++The Payment Service is responsible for managing the complete payment lifecycle within the Merchant Funding & ACH Settlement Platform.
++
++It receives payment creation requests from the Funding Service, validates and persists payment information, publishes payment requests to Kafka for bank settlement processing, consumes settlement acknowledgements from the Bank Simulator, updates payment status, and notifies the Funding Service about the final payment outcome.
++
++The Payment Service is the sole owner of payment data and settlement status. It does not maintain merchant profile information or funding request details beyond the identifiers required for payment processing.
++
++---
++
++# 2. Responsibilities
++
++- Create ACH payment records
++- Validate incoming payment requests
++- Persist payment information
++- Generate payment reference numbers
++- Publish payment requests to Kafka
++- Consume bank settlement acknowledgements from Kafka
++- Update payment status based on settlement result
++- Notify the Funding Service about final payment completion
++- Retrieve payment details
++- Expose internal REST APIs for payment operations
++
++---
++
++# 3. Package Structure
++
++```text
++payment-service
++│
++├── client
++│     └── FundingFeignClient
++│
++├── config
++├── controller
++├── dto
++├── entity
++├── enums
++├── exception
++├── kafka
++│     ├── producer
++│     └── consumer
++├── mapper
++├── repository
++├── service
++│     ├── interfaces
++│     └── impl
++├── util
++└── PaymentServiceApplication.java
++```
++
++---
++
++# 4. Persistence Model
++
++### Database
++
++**MySQL**
++
++---
++
++### Table: payments
++
++| Column | Type | Description |
++|---------|------|-------------|
++| id | UUID | Primary Key |
++| payment_reference | VARCHAR(30) | Merchant-facing payment reference |
++| funding_id | UUID | Associated funding request |
++| merchant_id | UUID | Merchant identifier |
++| settlement_account_number | VARCHAR(30) | Destination settlement account |
++| amount | DECIMAL(15,2) | Payment amount |
++| currency | VARCHAR(3) | Currency (Default: INR) |
++| status | VARCHAR(30) | Current payment status |
++| failure_reason | VARCHAR(255) | Settlement failure reason (Optional) |
++| version | BIGINT | Optimistic locking version |
++| created_at | TIMESTAMP | Creation timestamp |
++| updated_at | TIMESTAMP | Last modified timestamp |
++
++---
++
++# 5. Domain Model
++
++## Payment
++
++| Field | Type |
++|---------|------|
++| id | UUID |
++| paymentReference | String |
++| fundingId | UUID |
++| merchantId | UUID |
++| settlementAccountNumber | String |
++| amount | BigDecimal |
++| currency | Currency |
++| status | PaymentStatus |
++| failureReason | String |
++| version | Long |
++| createdAt | LocalDateTime |
++| updatedAt | LocalDateTime |
++
++---
++
++## PaymentStatus
++
++```text
++CREATED
++PROCESSING
++COMPLETED
++FAILED
++```
++
++---
++
++## Currency
++
++```text
++INR
++```
++
++Version 1 supports only the Indian Rupee (INR).
++
++The Currency enum has been introduced to support future multi-currency expansion without changing the domain model.
++
++---
++
++### Status Lifecycle
++
++```text
++CREATED
++    │
++    ▼
++PROCESSING
++    │
++    ├──────────────┐
++    ▼              ▼
++COMPLETED      FAILED
++```
++
++---
++
++# 6. DTO Design
++
++## CreatePaymentRequest
++
++| Field | Type |
++|---------|------|
++| fundingId | UUID |
++| referenceNumber | String |
++| merchantId | UUID |
++| amount | BigDecimal |
++| currency | Currency |
++| settlementAccountNumber | String |
++
++> Used internally by the Funding Service to create a payment after a funding request has been successfully validated.
++
++---
++
++## PaymentResponse
++
++| Field | Type |
++|---------|------|
++| paymentId | UUID |
++| paymentReference | String |
++| status | PaymentStatus |
++| message | String |
++
++---
++
++## BankSettlementEvent
++
++| Field | Type |
++|---------|------|
++| paymentId | UUID |
++| fundingId | UUID |
++| merchantId | UUID |
++| settlementAccountNumber | String |
++| amount | BigDecimal |
++| currency | Currency |
++
++> Published by the Payment Service to Kafka for asynchronous settlement processing by the Bank Simulator.
++
++---
++
++## BankSettlementResult
++
++| Field | Type |
++|---------|------|
++| paymentId | UUID |
++| settlementStatus | PaymentStatus |
++| failureReason | String |
++
++> Consumed from Kafka after the Bank Simulator completes settlement processing.
++
++---
++
++## FundingStatusUpdateRequest
++
++| Field | Type |
++|---------|------|
++| fundingStatus | FundingStatus |
++| failureReason | String (Optional) |
++
++> Sent internally to the Funding Service after the final payment outcome has been determined.
++
++---
++
++# 7. REST APIs
++
++## Internal APIs (Service-to-Service)
++
++### Create Payment
++
++#### Endpoint
++
++```http
++POST /payments
++```
++
++#### Purpose
++
++Used internally by the Funding Service to create an ACH payment after a funding request has been successfully validated.
++
++#### Request
++
++```json
++{
++  "fundingId": "uuid",
++  "referenceNumber": "FUND-202607-000001",
++  "merchantId": "uuid",
++  "amount": 100000,
++  "currency": "INR",
++  "settlementAccountNumber": "ACC1001"
++}
++```
++
++#### Response
++
++```json
++{
++  "paymentId": "uuid",
++  "paymentReference": "PAY-202607-000001",
++  "status": "PROCESSING",
++  "message": "Payment created successfully."
++}
++```
++
++**Response Code**
++
++```text
++201 Created
++```
++
++---
++
++### Get Payment by ID
++
++#### Endpoint
++
++```http
++GET /payments/{id}
++```
++
++#### Purpose
++
++Retrieves payment details for internal microservice communication.
++
++This endpoint is intended for trusted internal services and is not exposed through the API Gateway.
++
++**Response Code**
++
++```text
++200 OK
++404 Not Found
++```
++
++---
++
++# 8. Component Design
++
++## PaymentController
++
++### Responsibilities
++
++- Handle incoming HTTP requests
++- Validate request payloads
++- Delegate business logic to the PaymentService
++- Return standardized HTTP responses
++
++---
++
++## PaymentService
++
++### Responsibilities
++
++- Validate payment requests
++- Create payment records
++- Generate payment reference numbers
++- Publish settlement events to Kafka
++- Process settlement acknowledgements
++- Update payment status
++- Notify the Funding Service about payment completion
++- Retrieve payment information
++
++### Primary Methods
++
++- createPayment()
++- getPaymentById()
++- publishSettlementEvent()
++- processSettlementResult()
++- updatePaymentStatus()
++- notifyFundingService()
++
++---
++
++## PaymentRepository
++
++### Responsibilities
++
++- Persist payment records
++- Retrieve payment records
++- Update payment status
++
++### Primary Methods
++
++- save()
++- findById()
++- findByPaymentReference()
++- existsById()
++
++---
++
++## FundingFeignClient
++
++### Responsibilities
++
++- Notify the Funding Service about the final payment outcome
++
++### Endpoint Invoked
++
++```http
++PATCH /internal/funding/{id}/status
++```
++
++---
++
++## PaymentProducer
++
++### Responsibilities
++
++- Publish BankSettlementEvent messages to Kafka
++- Convert payment information into BankSettlementEvent objects
++- Send events to the Bank Simulator topic
++
++### Kafka Topic
++
++```text
++payment-settlement-request
++```
++
++---
++
++## PaymentConsumer
++
++### Responsibilities
++
++- Consume BankSettlementResult messages from Kafka
++- Validate settlement results
++- Prevent duplicate settlement processing
++- Update payment status
++- Notify the Funding Service
++
++### Kafka Topic
++
++```text
++payment-settlement-response
++```
++
++---
++
++# 9. Exception Handling
++
++The Payment Service uses centralized exception handling through
++`@RestControllerAdvice`.
++
++| Exception | Description | HTTP Status |
++|-----------|-------------|-------------|
++| PaymentNotFoundException | Payment does not exist | 404 Not Found |
++| InvalidPaymentRequestException | Invalid payment request | 400 Bad Request |
++| KafkaPublishException | Failed to publish settlement request | 500 Internal Server Error |
++| SettlementProcessingException | Failed while processing settlement acknowledgement | 500 Internal Server Error |
++| FundingServiceUnavailableException | Unable to notify Funding Service | 503 Service Unavailable |
++| DuplicatePaymentException | Duplicate payment detected | 409 Conflict |
++| ValidationException | Invalid request payload | 400 Bad Request |
++| PaymentAlreadyCompletedException | Payment has already reached a final state | 409 Conflict |
++
++---
++
++# 10. Sequence Flow
++
++## Payment Creation
++
++```text
++Funding Service
++    │
++    │ POST /payments
++    ▼
++Payment Controller
++    │
++    ▼
++Payment Service
++    │
++    │ Validate Request
++    ▼
++Payment Repository
++    │
++    │ Save Payment (Status = CREATED)
++    ▼
++MySQL
++    │
++    ▼
++Payment Service
++    │
++    │ Generate Settlement Event
++    ▼
++Kafka Producer
++    │
++    │ Publish Event
++    ▼
++Kafka Topic
++(payment-settlement-request)
++    │
++    ▼
++Payment Service
++    │
++    │ Update Status = PROCESSING
++    ▼
++Payment Repository
++    │
++    ▼
++MySQL
++    │
++    ▼
++Return PaymentResponse
++```
++
++---
++
++## Settlement Processing
++
++```text
++Bank Simulator
++    │
++    │ Publish Settlement Result
++    ▼
++Kafka Topic
++(payment-settlement-response)
++    │
++    ▼
++Kafka Consumer
++    │
++    ▼
++Payment Service
++    │
++    │ Update Payment Status
++    ▼
++Payment Repository
++    │
++    ▼
++MySQL
++    │
++    ▼
++Funding Feign Client
++    │
++    │ PATCH /internal/funding/{id}/status
++    ▼
++Funding Service
++    │
++    │ Update Funding Status
++    ▼
++Funding Database
++```
++---
++
++# 11. Design Considerations
++
++The following design decisions have been made for the Payment Service.
++
++---
++
++## Business Ownership
++
++- The Payment Service owns the complete payment lifecycle.
++- The Funding Service owns the funding request lifecycle.
++- The Auth Service owns merchant profile information.
++- Each microservice owns its own database and business data.
++
++---
++
++## Payment Processing
++
++- Every funding request results in exactly one payment.
++- The Payment Service persists the payment with status CREATED.
++- After successfully publishing the settlement event to Kafka, the payment status is updated to PROCESSING.
++- Settlement processing is performed asynchronously through Kafka.
++- Payment status is updated to COMPLETED or FAILED only after receiving the final acknowledgement from the Bank Simulator.
++
++---
++
++## Security
++
++- The Payment Service exposes only internal APIs.
++- Payment creation requests are accepted only from trusted microservices.
++- Merchant authentication is handled by the Auth Service and API Gateway.
++- Internal APIs are not exposed through the API Gateway.
++
++---
++
++## Communication
++
++- Payment creation uses synchronous REST communication with the Funding Service.
++- Bank settlement requests are published asynchronously to Kafka.
++- Settlement acknowledgements are consumed asynchronously from Kafka.
++- After settlement completion, the Payment Service synchronously notifies the Funding Service through an internal REST API.
++
++---
++
++## Data Consistency
++
++- One Payment belongs to exactly one Funding Request.
++- The Payment Service stores the associated `fundingId` and `merchantId` as references.
++- Merchant profile information is never duplicated in the Payment Service.
++- Funding status is updated only after the corresponding payment reaches a final state (COMPLETED or FAILED).
++- Each service owns and updates only its own business data.
++
++---
++
++## Event-Driven Processing
++
++Kafka is used to decouple payment creation from bank settlement.
++
++The Payment Service publishes settlement requests without waiting for the Bank Simulator to complete processing.
++
++Settlement results are received asynchronously, enabling scalable and resilient payment processing.
++
++---
++
++## Validation
++
++- Payment requests must reference a valid funding request.
++- Settlement account number must be present before payment creation.
++- Payment amount must be greater than zero.
++- Currency must be supported by the platform.
++- Settlement acknowledgements are validated before updating payment status.
++
++---
++
++## Auditing
++
++Every payment maintains:
++
++- createdAt
++- updatedAt
++
++These fields support auditing, reporting, operational monitoring, and troubleshooting.
++
++---
++
++## Reference Number Generation
++
++Each payment is assigned a merchant-facing payment reference number.
++
++### Format
++
++```text
++PAY-YYYYMM-XXXXXX
++```
++
++### Example
++
++```text
++PAY-202607-000001
++```
++
++Where:
++
++- **PAY** — Payment prefix
++- **YYYYMM** — Year and month of creation
++- **XXXXXX** — Sequential running number
++
++The UUID remains the internal identifier, while the payment reference number is used in APIs, logs, notifications, and operational support.
++
++---
++
++## Currency Management
++
++The Payment Service currently supports only **INR**.
++
++Using a Currency enum enables future support for additional currencies such as:
++
++- USD
++- EUR
++- GBP
++- AED
++
++without requiring changes to the domain model.
++
++---
++
++## Concurrency Control
++
++Optimistic locking is implemented using the `version` field.
++
++This prevents concurrent updates from overwriting one another when multiple settlement acknowledgements, retry mechanisms, or duplicate Kafka messages attempt to modify the same payment record.
++
++---
++
++## Service Boundaries
++
++The Payment Service never modifies funding request data directly.
++
++It communicates with:
++
++- Funding Service for payment creation requests.
++- Kafka for bank settlement processing.
++- Funding Service to notify the final payment outcome after settlement.
++
++Each service owns its own business logic and persists only its own data.
++
++---
++
++# 12. Future Enhancements
++
++The following enhancements are planned for future releases.
++
++## Functional Enhancements
++
++- Payment cancellation before settlement initiation
++- Payment history filters (date, amount, status)
++- Search by payment reference number
++- Multi-currency support
++- Partial payment support
++- Bulk payment processing
++- Merchant payment dashboard
++- Daily payment reconciliation
++
++---
++
++## Technical Enhancements
++
++- Idempotency support for payment creation
++- Transactional Outbox Pattern
++- Retry mechanism for Kafka publishing
++- Dead Letter Queue (DLQ) for failed settlement events
++- Resilience4j Circuit Breaker for Funding Service communication
++- Distributed tracing using OpenTelemetry
++- Audit logging
++- Prometheus & Grafana monitoring
++- API versioning
++
++---
++
++# 13. Conclusion
++
++The Payment Service is responsible for managing the complete payment lifecycle within the Merchant Funding & ACH Settlement Platform.
++
++It creates payment records, initiates bank settlement through Kafka, processes settlement acknowledgements, and communicates the final payment outcome back to the Funding Service.
++
++The service follows enterprise microservice principles by maintaining clear ownership of payment data, using asynchronous messaging for settlement processing, and interacting with other services only through well-defined APIs.
++
++The overall design provides:
++
++- Database-per-service architecture
++- Clear separation of business responsibilities
++- Synchronous communication for payment creation
++- Asynchronous Kafka-based bank settlement
++- Reliable payment status management
++- Scalable and maintainable service boundaries
++
++The design establishes a solid foundation for future enhancements such as idempotent processing, resilience patterns, dead letter queues, transactional messaging, multi-currency support, and advanced payment capabilities while remaining simple and maintainable for the initial implementation.
+\ No newline at end of file
